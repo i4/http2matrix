@@ -3,9 +3,9 @@ import ssl
 import sys
 import html
 import yaml
-import atexit
 import asyncio
 import logging
+import logging.config
 from aiohttp import web
 from nio import AsyncClient, MatrixRoom, RoomMessageText, responses
 
@@ -92,21 +92,37 @@ class MessageBot:
 	async def send(self, to, message):
 		room = None
 		receivers = []
+		to = to.strip()
+
 		if not message or len(message) == 0:
 			raise MessageException(400, f"Message is empty")
 		elif not to or len(to) == 0:
 			raise MessageException(400, f"No receiver for message")
-		elif to[0] == '!':
+		elif to[0] in [ '#', '!', '*' ]:
+			# Helper if URL encoding poses some difficulties for public rooms
+			if to[0] == '*':
+				to = '#' + to[1:]
+			# Check if allowed
 			if self.to_allow and not self.to_allow.match(to):
 				raise MessageException(400, f"Sending message to room {to} not allowed")
 			elif self.to_deny and self.to_deny.match(to):
 				raise MessageException(400, f"Sending message to room {to} denied")
 			else:
+				# resolve room alias
+				if to[0] == '#':
+					resp = await self.client.room_resolve_alias(to)
+					if isinstance(resp, responses.RoomResolveAliasResponse):
+						room = resp.room_id
+						logging.debug(f"Resolved room alias {to} to {room}")
+					else:
+						raise MessageException(400, f"Room alias {to} could not be resolved")
+			else:
 				room = to
-				receivers.append(to)
+				receivers.append(room)
 		else:
 			# allow multiple users ...
-			for o in to.split(','):
+			for o in re.split(',|;| ', to):
+				o = o.strip()
 				# Missing @
 				if o[0] != '@':
 					o = f'@{o}'
@@ -155,6 +171,7 @@ class MessageBot:
 
 				# Create new room if none exist
 				if not room:
+					logging.debug(f"Creating new room for {', '.join(list(members))}")
 					resp = await self.client.room_create(is_direct = True, invite = receivers)
 					if isinstance(resp, responses.RoomCreateResponse):
 						room = resp.room_id
@@ -168,6 +185,7 @@ class MessageBot:
 			if not isinstance(resp, responses.JoinResponse):
 				raise MessageException(500, f"Unable to join room", "{room}: {resp.message}")
 			# send the message
+			logging.debug(f"Sending message '{message}' to room {room}")
 			await self.client.room_send(
 				room_id = room,
 				message_type = "m.room.message",
@@ -209,14 +227,15 @@ class MessageBot:
 		<h1>{title}</h1>
 		<div>{text}</div>
 		<br>
-		<div><small><i>Please note:</i> The sender <tt></tt> will keep messages in his history – Admins may be able to read them.<br>
-		To clear the history every other member has to leave the room: If the sender detects that he is the only one in the next time he checks the occupants, he will leave and forget the messages.</div>
+		<div><small><i>Please note:</i> The bot will keep messages in his history – admins may be able to read them.<br>
+		To clear the history every other member has to leave the room: If the bot detects that he is the only one in the next time he checks the occupants, he will leave and forget those messages.</div>
 	</body>
 </html>""", status=code, content_type='text/html')
 
 
 	async def process(self, to, message, client):
 		try:
+			logging.info(f'Request from {client} to send "{message}" to "{to}"')
 			# Check if client is allowed to send request
 			if self.ip_allow and not self.ip_allow.match(client):
 				raise MessageException(403, f"Client with IP {client} not allowed")
@@ -224,7 +243,7 @@ class MessageBot:
 				raise MessageException(403, f"Client with IP {client} denied")
 			receivers = await self.send(to, message)
 
-			return self.response('Message send!', f'A message with the content <pre>{html.escape(message)}</pre> was sent to <tt>{html.escape(receivers)}</tt>')
+			return self.response('Message sent!', f'A message with the content <pre>{html.escape(message)}</pre> was sent to <tt>{html.escape(receivers)}</tt>')
 		except MessageException as e:
 			logging.warning(str(e))
 			return self.response("Sending message failed!", html.escape(e.message), e.status)
@@ -240,7 +259,20 @@ class MessageBot:
 
 
 	async def handle_landing(self, request):
-		return self.response('Welcome!', 'This ist the <b>http2matrix</b> service, for more details and documentation have a look at the <a href="https://gitlab.cs.fau.de/i4/infra/http2matrix">project page</a>!')
+		if 'to' in request.query and 'message' in request.query:
+			return await self.process(request.query['to'], request.query['message'], request.remote)
+		else:
+			return self.response('Welcome!', f'''This ist the <b>http2matrix</b> service, for more details and documentation have a look at the <a href="https://gitlab.cs.fau.de/i4/infra/http2matrix">project page</a>!
+			<h2>Try it</h2>
+			<form action="/" method="get">
+				<label for="to">To:</label>
+				<input type="text" id="to" name="to" placeholder="user(s) or room" title="For users you can either use the full Matrix user ID (e.g., @uj66ojab:fau.de) or just the username (e.g., uj66ojab). Multiple users should be delimited by a comma. In case of a room, you have to always specify the full ID (e.g., #i4:fau.de) neither shortcuts nor sending to multiple rooms is supported."><br>
+				<br>
+				<label for="message">Message:</label><br>
+				<textarea id="message" name="message" rows="4" cols="50">Enter your message here...</textarea><br>
+				<br>
+				<input type="submit" value="Send">
+			</form>''')
 
 
 async def main(configfile):
@@ -253,6 +285,10 @@ async def main(configfile):
 		raise Exception("Missing 'matrix' section in config '{configfile}'!")
 	elif not 'web' in settings:
 		raise Exception("Missing 'web' section in config '{configfile}'!")
+
+	if 'logging' in settings:
+		logging.config.dictConfig(settings['logging'])
+		logging.debug("Logging configured")
 
 	# Initialize Message bot
 	msgbot = MessageBot(settings['matrix'].get('domain'), settings['matrix'].get('access'), settings['web'].get('access'))
@@ -306,6 +342,5 @@ async def main(configfile):
 
 
 if __name__ == '__main__':
-	#logging.basicConfig(level=logging.DEBUG)
 	asyncio.run(main(sys.argv[1] if len(sys.argv) > 1 else 'config.yml'))
 

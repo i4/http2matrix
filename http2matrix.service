@@ -1,0 +1,15 @@
+[Unit]
+Description=HTTP2Matrix Bridge
+After=network.target
+
+[Service]
+Type=idle
+User=i4chatbot
+Group=i4chatbot
+ExecStart=/usr/bin/python3 /opt/http2matrix/http2matrix.py /opt/http2matrix/config.yml
+Restart=always
+RestartSec=3
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

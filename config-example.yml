@@ -6,11 +6,11 @@ web:
         # host to listen on (all interfaces if omitted)
         host: localhost
         # listening port
-        port: 8001
+        port: 8080
 
     # and a https service
     service-https:
-        port: 8002
+        port: 80443
         # SSL cert
         # openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 365
         cert: cert.pem
@@ -49,9 +49,30 @@ matrix:
             - "*.fau.de"
             # some RUB people
             - "@eichlccc:ruhr-uni-bochum.de"
-            - "@herzobp7:ruhr-uni-bochum.de"
-            - "@hofmeh1j:ruhr-uni-bochum.de"
 
         # each of the following entries will be denied even if it matches an allowed entry
         deny:
             - "@heinloth:gwaaf.rrze.fau.de"
+
+
+# Configure logging
+# see https://docs.python.org/3/library/logging.config.html
+logging:
+    version: 1
+    disable_existing_loggers: true
+
+    formatters:
+        standard:
+            format: "%(asctime)s %(levelname)s: %(message)s [in %(funcName)s @ %(pathname)s:%(lineno)s]"
+
+    handlers:
+        console:
+            class: logging.StreamHandler
+            formatter: standard
+            level: DEBUG
+            stream: ext://sys.stdout
+
+    root:
+        handlers: [console]
+        level: NOTSET
+        propogate: yes
