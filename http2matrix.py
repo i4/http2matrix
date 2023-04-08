@@ -113,6 +113,7 @@ class MessageBot:
 					resp = await self.client.room_resolve_alias(to)
 					if isinstance(resp, responses.RoomResolveAliasResponse):
 						room = resp.room_id
+						recipients.append(to)
 						logging.debug(f"Resolved room alias {to} to {room}")
 					else:
 						raise MessageException(400, f"Room alias {to} could not be resolved")
