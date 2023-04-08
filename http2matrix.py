@@ -174,9 +174,6 @@ class MessageBot:
 					logging.debug(f"Creating new room for {', '.join(list(members))}")
 					resp = await self.client.room_create(is_direct = True, invite = recipients)
 					if isinstance(resp, responses.RoomCreateResponse):
-						m = await get_room_members(resp.room_id)
-						if len(m) < 2:
-							raise MessageException(400, f"No user from {', '.join(recipients)} exists on the server")
 						room = resp.room_id
 						self.room_cache[members] = room
 					else:
