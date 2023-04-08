@@ -1,0 +1,57 @@
+# Configuration for the web interface with its connections
+web:
+    # List all service endpoints
+    # for example a http service
+    service-http:
+        # host to listen on (all interfaces if omitted)
+        host: localhost
+        # listening port
+        port: 8001
+
+    # and a https service
+    service-https:
+        port: 8002
+        # SSL cert
+        # openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 365
+        cert: cert.pem
+        key: key.pem
+
+    # Limit access to server (IPv4 & 6, but no host names!)
+    access:
+        # if 'allow' is set, the IP of every client using the webservice must match at least one of its entries
+        # (you can use '*' as wildcard character)
+        allow:
+            - 127.0.0.1
+            - ::1
+        # each of the following IPs will be denied even if it matches an allowed entry
+        deny:
+            - 123.0.0.2
+
+
+# Configuration for Matrix message bot
+matrix:
+    # Account
+    homeserver: "https://matrix.fau.de/"
+    user: "@i4bot:fau.de"
+    password: "correcthorsebatterystaple"
+
+    # Default server for user (if domain is missing)
+    domain: "fau.de"
+
+    # Limit access to Matrix users / rooms
+    access:
+        # if 'allow' is set, every receiver must match at least one of its entries
+        # (you can use '*' as wildcard character)
+        allow:
+            # allow all users and rooms at the offical FAU server
+            - "*:fau.de"
+            # and allow other FAU matrix servers
+            - "*.fau.de"
+            # some RUB people
+            - "@eichlccc:ruhr-uni-bochum.de"
+            - "@herzobp7:ruhr-uni-bochum.de"
+            - "@hofmeh1j:ruhr-uni-bochum.de"
+
+        # each of the following entries will be denied even if it matches an allowed entry
+        deny:
+            - "@heinloth:gwaaf.rrze.fau.de"
