@@ -39,7 +39,7 @@ If you want to use HTTPS, get a certificate -- or, for testing purposes, create 
 
 	openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 365
 
-Make sure to use the `access` mechanism to both restrict clients being able to make a request and limiting users/rooms which are allowed to be sent messages to.
+Make sure to use the `access` mechanism to restrict both clients being able to make a request and users/rooms which are allowed to be sent messages to.
 Otherwise this will be an El Dorado for spam systems!
 
 You should also consider using a restricted user without any write permissions on your system (e.g. `chatbot`) for running the service.
@@ -63,6 +63,18 @@ Debug logging might help to find issues.
 Usage
 -----
 
+Besides sending a message to a single user
+
+	https://example.org/%40user:matrix.org/Hello%20world
+
+multiple recipients can be addressed (a shared room will be created)
+
+	https://example.org/%40user:matrix.org,%40someone:matrix.org/Hello%20world
+
+or existing rooms (also using aliases):
+
+	https://example.org/%23room:matrix.org/Hello%20world
+
 Due to several annoying limitations in older systems, this bot provides multiple ways for a request:
 
 	http://example.org/?to=TO&message=MESSAGE
@@ -73,8 +85,9 @@ Due to several annoying limitations in older systems, this bot provides multiple
 where **TO** can be a room, one or multiple users:
 For users you can either use the full Matrix user ID (e.g., `@uj66ojab:fau.de`) or just the username (e.g., `uj66ojab`).
 In the latter case, the Matrix user ID will be generated using the configured default domain.
-Multiple users should be delimited by a comma (but semicolon and space will work as well)
-In case of a room, you have to always specify the full (alias) ID (e.g., `#i4:fau.de`) - but neither shortcuts nor sending to multiple rooms is supported.
+Multiple users should be delimited by a comma (but semicolon and space will work as well), and the bot will create a shared room with all recipients.
+
+In case of a room, you have to always specify the full (alias) ID (e.g., `#i4:fau.de`) – neither shortcuts nor sending to multiple rooms is supported.
 
 URLs (including **TO** and **MESSAGE**) should be [encoded according to the standard](https://en.wikipedia.org/wiki/URL_encoding), e.g. using `%40` for `@` in user and `%23` for `#`  in room prefixes.
 Since the hash character is used for anchors as well, the `*` character can be used instead for referencing room aliases (e.g., `*i4:fau.de`).
@@ -84,9 +97,11 @@ Internals
 ---------
 
 Since Matrix has, unlike XMPP, no native direct messages but uses rooms, the bot will investigate all rooms it has joined.
-If the bot and all receivers of a message are either joined or invited in a room, but not anyone else, the message will be delivered to this room.
+If the bot and all recipients of a message are either joined or invited in a room, but not anyone else, the message will be delivered to this room.
 The part with invited users makes the code a bit more complex but is crucial to ensure that for subsequent messages the same room will be used again, even if a user hasn't joined yet.
-In case a user has left, a message targeting him as well will result in creating a new room and inviting all other receivers (if any).
+In case a user has left, a message targeting him as well will result in creating a new room and inviting all other recipients (if any).
+
+Non-existing recipients will be silently ignored as long as at least one recipient exits on the server.
 
 **Please note:** The bot will keep the messages in his history – and hence admins may be able to read them.
 To clear the history every other member has to leave the room:

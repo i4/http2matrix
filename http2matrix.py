@@ -91,13 +91,13 @@ class MessageBot:
 
 	async def send(self, to, message):
 		room = None
-		receivers = []
+		recipients = []
 		to = to.strip()
 
 		if not message or len(message) == 0:
 			raise MessageException(400, f"Message is empty")
 		elif not to or len(to) == 0:
-			raise MessageException(400, f"No receiver for message")
+			raise MessageException(400, f"No recipient for message")
 		elif to[0] in [ '#', '!', '*' ]:
 			# Helper if URL encoding poses some difficulties for public rooms
 			if to[0] == '*':
@@ -116,9 +116,9 @@ class MessageBot:
 						logging.debug(f"Resolved room alias {to} to {room}")
 					else:
 						raise MessageException(400, f"Room alias {to} could not be resolved")
-			else:
-				room = to
-				receivers.append(room)
+				else:
+					room = to
+					recipients.append(room)
 		else:
 			# allow multiple users ...
 			for o in re.split(',|;| ', to):
@@ -134,14 +134,14 @@ class MessageBot:
 				elif self.to_deny and self.to_deny.match(to):
 					raise MessageException(400, f"Sending message to user {o} denied")
 				else:
-					receivers.append(o)
+					recipients.append(o)
 
 			# Required members for room
-			members = frozenset( receivers + [ self.user ] )
+			members = frozenset( recipients + [ self.user ] )
 
 			# ... but prevent mixing with room names!
-			if not all(u[0] == '@' for u in receivers):
-				raise MessageException(400, f"Receiver must be either user(s) or a room")
+			if not all(u[0] == '@' for u in recipients):
+				raise MessageException(400, f"Recipient must be either user(s) or a room")
 			else:
 				# check cache -- and ensure it is sill up to date
 				if members in self.room_cache and members == await self.get_room_members(self.room_cache[members]):
@@ -172,12 +172,15 @@ class MessageBot:
 				# Create new room if none exist
 				if not room:
 					logging.debug(f"Creating new room for {', '.join(list(members))}")
-					resp = await self.client.room_create(is_direct = True, invite = receivers)
+					resp = await self.client.room_create(is_direct = True, invite = recipients)
 					if isinstance(resp, responses.RoomCreateResponse):
+						m = await get_room_members(resp.room_id)
+						if len(m) < 2:
+							raise MessageException(400, f"No user from {', '.join(recipients)} exists on the server")
 						room = resp.room_id
 						self.room_cache[members] = room
 					else:
-						raise MessageException(500, f"Unable to create new room for {', '.join(receivers)}", resp.message)
+						raise MessageException(500, f"Unable to create new room for {', '.join(recipients)}", resp.message)
 
 		if room:
 			# Join (always)
@@ -195,7 +198,7 @@ class MessageBot:
 			# This should not happen
 			raise MessageException(500, f"No room available")
 
-		return ', '.join(receivers)
+		return ', '.join(recipients)
 
 
 	async def sync(self):
@@ -241,9 +244,9 @@ class MessageBot:
 				raise MessageException(403, f"Client with IP {client} not allowed")
 			elif self.ip_deny and self.ip_deny.match(client):
 				raise MessageException(403, f"Client with IP {client} denied")
-			receivers = await self.send(to, message)
+			recipients = await self.send(to, message)
 
-			return self.response('Message sent!', f'A message with the content <pre>{html.escape(message)}</pre> was sent to <tt>{html.escape(receivers)}</tt>')
+			return self.response('Message sent!', f'A message with the content <pre>{html.escape(message)}</pre> was sent to <tt>{html.escape(recipients)}</tt>')
 		except MessageException as e:
 			logging.warning(str(e))
 			return self.response("Sending message failed!", html.escape(e.message), e.status)
