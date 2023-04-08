@@ -42,6 +42,8 @@ If you want to use HTTPS, get a certificate -- or, for testing purposes, create 
 Make sure to use the `access` mechanism to both restrict clients being able to make a request and limiting users/rooms which are allowed to be sent messages to.
 Otherwise this will be an El Dorado for spam systems!
 
+You should also consider using a restricted user without any write permissions on your system (e.g. `chatbot`) for running the service.
+
 Start your server with
 
 	python3 http2matrix.py config.yml
