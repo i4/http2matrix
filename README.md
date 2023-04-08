@@ -100,7 +100,7 @@ Since Matrix has, unlike XMPP, no native direct messages but uses rooms, the bot
 If the bot and all recipients of a message are either joined or invited in a room, but not anyone else, the message will be delivered to this room.
 The part with invited users makes the code a bit more complex but is crucial to ensure that for subsequent messages the same room will be used again, even if a user hasn't joined yet.
 In case a user has left, a message targeting him as well will result in creating a new room and inviting all other recipients (if any).
-Non-existing recipients will be silently ignored.
+Non-existing recipients might be silently ignored.
 
 **Please note:** The bot will keep the messages in his history – and hence admins may be able to read them.
 To clear the history every other member has to leave the room:

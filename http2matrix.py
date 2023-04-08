@@ -80,7 +80,7 @@ class MessageBot:
 	async def get_room_members(self, room_id: str) -> frozenset[str]:
 		members = set()
 		resp = await self.client.room_get_state(room_id)
-		if isinstance(resp, responses.RoomGetStateResponse):
+		if isinstance(resp, responses.RoomGetStateResponse) and resp.room_id == room_id:
 			for e in resp.events:
 				if 'type' in e and e['type'] == 'm.room.member' and e['content']['membership'] in [ 'invite', 'join' ]:
 					members.add(e['state_key'])
@@ -129,6 +129,8 @@ class MessageBot:
 				# Missing domain -> use default
 				if not ':' in o:
 					o = f'{o}:{self.domain}'
+
+				#  check user
 				if self.to_allow and not self.to_allow.match(o):
 					raise MessageException(400, f"Sending message to user {o} not allowed")
 				elif self.to_deny and self.to_deny.match(to):
@@ -151,12 +153,17 @@ class MessageBot:
 					logging.debug(f"Checking all rooms...")
 					# Rebuild cache
 					self.room_cache.clear()
+
+					resp = await self.client.joined_rooms()
+					if not isinstance(resp, responses.JoinedRoomsResponse):
+						raise MessageException(500, f"Unable to query rooms", resp.message)
+
 					# Check all rooms
-					for r in (await self.client.joined_rooms()).rooms:
+					for r in resp.rooms:
 						# get all members
 						j = await self.get_room_members(r);
 
-						if len(j) == 1 and { me } == j:
+						if len(j) == 1 and { self.user } == j:
 							# Leave and forget room if only bot is member
 							logging.debug(f"Deleting old room {r}")
 							await self.client.room_leave(r)
