@@ -147,13 +147,14 @@ class MessageBot:
 				raise MessageException(400, f"Recipient must be either user(s) or a room")
 			else:
 				# check cache -- and ensure it is sill up to date
-				if members in self.room_cache and members == await self.get_room_members(self.room_cache[members]):
-					room = self.room_cache[members]
+				cached_room = self.room_cache.get(members)
+				if cached_room and members == await self.get_room_members(cached_room):
+					room = cached_room
 					logging.debug(f"Found room {room} for {', '.join(list(members))} in cache")
 				else:
 					logging.debug(f"Checking all rooms...")
 					# Rebuild cache
-					self.room_cache.clear()
+					cache = {}
 
 					resp = await self.client.joined_rooms()
 					if not isinstance(resp, responses.JoinedRoomsResponse):
@@ -171,11 +172,14 @@ class MessageBot:
 							await self.client.room_forget(r)
 						else:
 							# Put room into cache
-							self.room_cache[j] = r
+							cache[j] = r
 							# Check if we have a room
 							if members == j:
 								room = r
 								logging.debug(f"Found room {r} for {', '.join(list(members))}")
+
+					# Update dict
+					self.room_cache = cache
 
 				# Create new room if none exist
 				if not room:
