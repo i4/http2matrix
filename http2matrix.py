@@ -85,7 +85,7 @@ class MessageBot:
 				if 'type' in e and e['type'] == 'm.room.member' and e['content']['membership'] in [ 'invite', 'join' ]:
 					members.add(e['state_key'])
 		else:
-			logging.debug(f"Room {r} does not exist anymore: {resp.message}")
+			logging.debug(f"Room {room_id} does not exist anymore: {resp.message}")
 		return frozenset(members)
 
 
