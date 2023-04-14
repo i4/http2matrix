@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 """
 This module provides an HTTP 2 Matrix message bot
 
@@ -18,6 +21,12 @@ import logging.config
 import yaml
 from aiohttp import web
 from nio import AsyncClient, responses
+
+
+__author__ = "Bernhard Heinloth"
+__copyright__ = "Copyright 2023, Informatik 4 / FAU"
+__license__ = "AGPL"
+__version__ = "1.0.0"
 
 
 class MessageException(Exception):

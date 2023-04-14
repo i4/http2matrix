@@ -47,12 +47,12 @@ matrix:
             - "*:fau.de"
             # and allow other FAU matrix servers
             - "*.fau.de"
-            # some RUB people
-            - "@eichlccc:ruhr-uni-bochum.de"
+            # some other people
+            - "@foobar:matrix.org"
 
         # each of the following entries will be denied even if it matches an allowed entry
         deny:
-            - "@heinloth:gwaaf.rrze.fau.de"
+            - "@drevil:fau.de"
 
 
 # Configure logging
