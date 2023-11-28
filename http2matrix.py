@@ -125,7 +125,7 @@ class MessageBot:
             return True
         else:
             logging.error(
-                "Logging in on %s as %s failed: %s", homeserver, user, resp.message
+                f"Logging in on {homeserver} as {user} failed: {resp.message} (HTTP STATUS: {resp.transport_response.status})"
             )
             await self.client.close()
             return False
