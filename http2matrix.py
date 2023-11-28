@@ -42,6 +42,7 @@ class MessageException(Exception):
     details : str
         Additional details for the server-side logging
     """
+
     def __init__(self, status, message, details=None):
         self.status: int = status
         self.message: str = message
@@ -49,8 +50,8 @@ class MessageException(Exception):
         super().__init__(self.message)
 
     def __str__(self):
-        append = f' ({self.details})' if self.details else ''
-        return f'Status {self.status} - {self.message}{append}'
+        append = f" ({self.details})" if self.details else ""
+        return f"Status {self.status} - {self.message}{append}"
 
 
 class MessageBot:
@@ -66,35 +67,40 @@ class MessageBot:
     access_web : dict[str, list[str]]
         Allow/deny list details for HTTP client IPs
     """
-    def __init__(self, default_domain: str | None = None,
-                 access_matrix: dict[str, list[str]] | None = None,
-                 access_web: dict[str, list[str]] | None = None):
+
+    def __init__(
+        self,
+        default_domain: str | None = None,
+        access_matrix: dict[str, list[str]] | None = None,
+        access_web: dict[str, list[str]] | None = None,
+    ):
         self.client: AsyncClient = None
         self.user: str = ""
         self.room_cache: dict[frozenset[str], str] = {}
         self.domain: str | None = default_domain
-        self.snom_fix = re.compile(r'[=](\S.*?\S)([&]|$)',
-                                   re.IGNORECASE | re.UNICODE)
+        self.snom_fix = re.compile(r"[=](\S.*?\S)([&]|$)", re.IGNORECASE | re.UNICODE)
         if access_matrix:
-            self.to_allow = self.get_to_regex(access_matrix.get('allow'))
-            self.to_deny = self.get_to_regex(access_matrix.get('deny'))
+            self.to_allow = self.get_to_regex(access_matrix.get("allow"))
+            self.to_deny = self.get_to_regex(access_matrix.get("deny"))
         if access_web:
-            self.ip_allow = self.get_ip_regex(access_web.get('allow'))
-            self.ip_deny = self.get_ip_regex(access_web.get('deny'))
+            self.ip_allow = self.get_ip_regex(access_web.get("allow"))
+            self.ip_deny = self.get_ip_regex(access_web.get("deny"))
 
     @staticmethod
     def get_ip_regex(ip_list: list[str] = None) -> Pattern | None:
         """Get an RegEx matching the given IP(v4 & 6) wildcard list."""
         if not ip_list or len(ip_list) == 0:
             return None
-        valid_ip = re.compile(r'[0-9a-fA-F:.*]')
+        valid_ip = re.compile(r"[0-9a-fA-F:.*]")
         regex_list = []
         for ip in ip_list:
             if valid_ip.match(ip):
-                regex_list.append(ip.replace('.', "\\.").replace('*', '[0-9a-fA-F:.]+'))
+                regex_list.append(ip.replace(".", "\\.").replace("*", "[0-9a-fA-F:.]+"))
             else:
-                logging.warning('%s is not a valid ip - skipping!\n', ip)
-        return re.compile(f'^({"|".join(regex_list)})$') if len(regex_list) > 0 else None
+                logging.warning("%s is not a valid ip - skipping!\n", ip)
+        return (
+            re.compile(f'^({"|".join(regex_list)})$') if len(regex_list) > 0 else None
+        )
 
     @staticmethod
     def get_to_regex(to_list: list[str] = None) -> Pattern | None:
@@ -103,20 +109,24 @@ class MessageBot:
             return None
         regex_list = []
         for to in to_list:
-            regex_list.append('.*'.join([re.escape(regex) for regex in to.split('*')]))
-        return re.compile(f'^({"|".join(regex_list)})$') if len(regex_list) > 0 else None
+            regex_list.append(".*".join([re.escape(regex) for regex in to.split("*")]))
+        return (
+            re.compile(f'^({"|".join(regex_list)})$') if len(regex_list) > 0 else None
+        )
 
     async def connect(self, homeserver: str, user: str, password: str) -> bool:
         """Connect and login into Matrix"""
         client = AsyncClient(homeserver, user)
         resp = await client.login(password)
         if isinstance(resp, responses.LoginResponse):
-            logging.debug('Connected as %s on %s!', user, homeserver)
+            logging.debug("Connected as %s on %s!", user, homeserver)
             self.user = user
             self.client = client
             return True
         else:
-            logging.error('Logging in on %s as %s failed: %s', homeserver, user, resp.message)
+            logging.error(
+                "Logging in on %s as %s failed: %s", homeserver, user, resp.message
+            )
             await self.client.close()
             return False
 
@@ -126,11 +136,14 @@ class MessageBot:
         resp = await self.client.room_get_state(room_id)
         if isinstance(resp, responses.RoomGetStateResponse) and resp.room_id == room_id:
             for event in resp.events:
-                if 'type' in event and event['type'] == 'm.room.member' \
-                   and event['content']['membership'] in ['invite', 'join']:
-                    members.add(event['state_key'])
+                if (
+                    "type" in event
+                    and event["type"] == "m.room.member"
+                    and event["content"]["membership"] in ["invite", "join"]
+                ):
+                    members.add(event["state_key"])
         else:
-            logging.debug('Room %s does not exist anymore: %s', room_id, resp.message)
+            logging.debug("Room %s does not exist anymore: %s", room_id, resp.message)
         return frozenset(members)
 
     async def send(self, to: str, message: str) -> str:
@@ -139,72 +152,82 @@ class MessageBot:
         recipients: list[str] = []
         to = to.strip()
         if not self.client:
-            raise MessageException(500, 'Not connected to Matrix')
+            raise MessageException(500, "Not connected to Matrix")
         if not message or len(message) == 0:
-            raise MessageException(400, 'Message is empty')
+            raise MessageException(400, "Message is empty")
         if not to or len(to) == 0:
-            raise MessageException(400, 'No recipient for message')
-        if to[0] in ['#', '!', '*']:
+            raise MessageException(400, "No recipient for message")
+        if to[0] in ["#", "!", "*"]:
             # Helper if URL encoding poses some difficulties for public rooms
-            if to[0] == '*':
-                to = '#' + to[1:]
+            if to[0] == "*":
+                to = "#" + to[1:]
             # Check if allowed
             if self.to_allow and not self.to_allow.match(to):
-                raise MessageException(400, f'Sending message to room {to} not allowed')
+                raise MessageException(400, f"Sending message to room {to} not allowed")
             if self.to_deny and self.to_deny.match(to):
-                raise MessageException(400, f'Sending message to room {to} denied')
+                raise MessageException(400, f"Sending message to room {to} denied")
             # resolve room alias
-            if to[0] == '#':
+            if to[0] == "#":
                 resp = await self.client.room_resolve_alias(to)
                 if isinstance(resp, responses.RoomResolveAliasResponse):
                     room = resp.room_id
                     recipients.append(to)
-                    logging.debug('Resolved room alias %s to %s', to, room)
+                    logging.debug("Resolved room alias %s to %s", to, room)
                 else:
-                    raise MessageException(400, f'Room alias {to} could not be resolved')
+                    raise MessageException(
+                        400, f"Room alias {to} could not be resolved"
+                    )
             else:
                 room = to
                 recipients.append(room)
         else:
             # allow multiple users ...
-            for user_id in re.split(',|;| ', to):
+            for user_id in re.split(",|;| ", to):
                 user_id = user_id.strip()
                 # Missing @
-                if user_id[0] != '@':
-                    user_id = f'@{user_id}'
+                if user_id[0] != "@":
+                    user_id = f"@{user_id}"
                 # Missing domain -> use default
-                if ':' not in user_id:
-                    user_id = f'{user_id}:{self.domain}'
+                if ":" not in user_id:
+                    user_id = f"{user_id}:{self.domain}"
                 #  check user
                 if self.to_allow and not self.to_allow.match(user_id):
-                    raise MessageException(400, f'Sending message to user {user_id} not allowed')
+                    raise MessageException(
+                        400, f"Sending message to user {user_id} not allowed"
+                    )
                 if self.to_deny and self.to_deny.match(user_id):
-                    raise MessageException(400, f'Sending message to user {user_id} denied')
+                    raise MessageException(
+                        400, f"Sending message to user {user_id} denied"
+                    )
                 recipients.append(user_id)
             # Required members for room
             members: frozenset[str] = frozenset(recipients + [self.user])
             # ... but prevent mixing with room names!
-            if not all(u[0] == '@' for u in recipients):
-                raise MessageException(400, 'Recipient must be either user(s) or a room')
+            if not all(u[0] == "@" for u in recipients):
+                raise MessageException(
+                    400, "Recipient must be either user(s) or a room"
+                )
             # check cache -- and ensure it is sill up to date
             cached_room = self.room_cache.get(members)
             if cached_room and members == await self.get_room_members(cached_room):
                 room = cached_room
-                logging.debug('Found room %s for %s in cache', room, ', '.join(list(members)))
+                logging.debug(
+                    "Found room %s for %s in cache", room, ", ".join(list(members))
+                )
             else:
-                logging.debug('Checking all rooms...')
+                logging.debug("Checking all rooms...")
                 # Rebuild cache
                 cache = {}
                 resp = await self.client.joined_rooms()
                 if not isinstance(resp, responses.JoinedRoomsResponse):
-                    raise MessageException(500, 'Unable to query rooms', resp.message)
+                    raise MessageException(500, "Unable to query rooms", resp.message)
                 # Check all rooms
                 for check_room in resp.rooms:
                     # get all members
                     joined = await self.get_room_members(check_room)
                     if len(joined) == 1 and {self.user} == joined:
                         # Leave and forget room if only bot is member
-                        logging.debug('Deleting old room %s', check_room)
+                        logging.debug("Deleting old room %s", check_room)
                         await self.client.room_leave(check_room)
                         await self.client.room_forget(check_room)
                     else:
@@ -213,50 +236,58 @@ class MessageBot:
                         # Check if we have a room
                         if members == joined:
                             room = check_room
-                            logging.debug('Found room %s for %s', check_room,
-                                          ', '.join(list(members)))
+                            logging.debug(
+                                "Found room %s for %s",
+                                check_room,
+                                ", ".join(list(members)),
+                            )
                 # Update dict
                 self.room_cache = cache
             # Create new room if none exist
             if not room:
-                logging.debug('Creating new room for %s', ', '.join(list(members)))
+                logging.debug("Creating new room for %s", ", ".join(list(members)))
                 resp = await self.client.room_create(is_direct=True, invite=recipients)
                 if isinstance(resp, responses.RoomCreateResponse):
                     room = resp.room_id
                     self.room_cache[members] = resp.room_id
                 else:
-                    raise MessageException(500, 'Unable to create new room for ' +
-                                           ", ".join(recipients), resp.message)
+                    raise MessageException(
+                        500,
+                        "Unable to create new room for " + ", ".join(recipients),
+                        resp.message,
+                    )
         if room:
             # Join (always)
             resp = await self.client.join(room)
             if not isinstance(resp, responses.JoinResponse):
-                raise MessageException(500, 'Unable to join room', f'{room}: {resp.message}')
+                raise MessageException(
+                    500, "Unable to join room", f"{room}: {resp.message}"
+                )
             # send the message
             logging.debug('Sending message "%s" to room %s', message, room)
             await self.client.room_send(
                 room_id=room,
-                message_type='m.room.message',
-                content={'msgtype': 'm.text', 'body': message},
+                message_type="m.room.message",
+                content={"msgtype": "m.text", "body": message},
             )
         else:
             # This should not happen
-            raise MessageException(500, 'No room available')
-        return ', '.join(recipients)
+            raise MessageException(500, "No room available")
+        return ", ".join(recipients)
 
     async def sync(self) -> None:
         """Synchronize with Matrix server."""
         if self.client:
             resp = await self.client.sync(30000)
             if isinstance(resp, responses.SyncResponse):
-                logging.debug('Synchronized with token %s', resp.next_batch)
+                logging.debug("Synchronized with token %s", resp.next_batch)
             else:
-                logging.warning('Synchronization failed')
+                logging.warning("Synchronization failed")
 
     async def disconnect(self) -> None:
         """Logout and disconnect from Matrix server."""
         if self.client:
-            logging.debug('Disconnecting matrix')
+            logging.debug("Disconnecting matrix")
             await self.client.logout()
             await self.client.close()
             self.client = None
@@ -264,7 +295,8 @@ class MessageBot:
     @staticmethod
     def response(title: str, text: str, code: int = 200) -> web.Response:
         """Create a HTTP response."""
-        return web.Response(text=f"""<!doctype html>
+        return web.Response(
+            text=f"""<!doctype html>
 <html lang="en">
     <head>
         <meta charset="utf-8">
@@ -283,10 +315,14 @@ class MessageBot:
             he will leave and forget those messages.
         </div>
     </body>
-</html>""", status=code, content_type='text/html')
+</html>""",
+            status=code,
+            content_type="text/html",
+        )
 
-    async def process(self, to: str | None, message: str | None,
-                      client: str | None) -> web.Response:
+    async def process(
+        self, to: str | None, message: str | None, client: str | None
+    ) -> web.Response:
         """Process a message send HTTP request."""
         if not to or len(to) == 0:
             raise MessageException(400, "Missing recipient in request")
@@ -301,33 +337,46 @@ class MessageBot:
                 if self.ip_deny and self.ip_deny.match(client):
                     raise MessageException(403, f"Client with IP {client} denied")
             recipients = await self.send(to, message)
-            return self.response('Message sent!',
-                                 f'A message with the content <pre>{html.escape(message)}</pre>'
-                                 f' was sent to <tt>{html.escape(recipients)}</tt>')
+            return self.response(
+                "Message sent!",
+                f"A message with the content <pre>{html.escape(message)}</pre>"
+                f" was sent to <tt>{html.escape(recipients)}</tt>",
+            )
         except MessageException as exception:
             logging.warning("Exception: %s", str(exception))
-            return self.response("Sending message failed!",
-                                 html.escape(exception.message),
-                                 exception.status)
+            return self.response(
+                "Sending message failed!",
+                html.escape(exception.message),
+                exception.status,
+            )
 
     async def handle_send(self, request: web.Request) -> web.Response:
         """Handle a '/TO/MSG' HTTP request"""
-        return await self.process(request.match_info.get('to'),
-                                  request.match_info.get('message'),
-                                  request.remote)
+        return await self.process(
+            request.match_info.get("to"),
+            request.match_info.get("message"),
+            request.remote,
+        )
 
     async def handle_snom(self, request: web.Request) -> web.Response:
         """Handle a '/TO/?MSG=var&' HTTP request"""
         # cleaning snom variables in message which have to be prefixed with '=' and ends with '&'
-        return await self.process(request.match_info.get('to'),  self.snom_fix.sub(r'\1',
-                                  request.query_string), request.remote)
+        return await self.process(
+            request.match_info.get("to"),
+            self.snom_fix.sub(r"\1", request.query_string),
+            request.remote,
+        )
 
     async def handle_landing(self, request: web.Request) -> web.Response:
         """Handle landing page and '/?to=TO&message=MSG' HTTP requests"""
-        if 'to' in request.query and 'message' in request.query:
-            return await self.process(request.query['to'], request.query['message'], request.remote)
+        if "to" in request.query and "message" in request.query:
+            return await self.process(
+                request.query["to"], request.query["message"], request.remote
+            )
         else:
-            return self.response('Welcome!', '''This ist the <b>http2matrix</b> service,
+            return self.response(
+                "Welcome!",
+                """This ist the <b>http2matrix</b> service,
 for more details and documentation have a look at the
 <a href="https://gitlab.cs.fau.de/i4/infra/http2matrix">project page</a>!
             <h2>Try it</h2>
@@ -339,64 +388,81 @@ for more details and documentation have a look at the
                 <textarea id="message" name="message" rows="4" cols="50">Enter your message here...</textarea><br>
                 <br>
                 <input type="submit" value="Send">
-            </form>''')
+            </form>""",
+            )
 
 
 async def start(configfile: str) -> None:
     """Setup HTTP server according to configuration file"""
     # Load config file
-    with open(configfile, 'r', encoding='utf-8') as file:
+    with open(configfile, "r", encoding="utf-8") as file:
         settings = yaml.safe_load(file)
 
     if not settings:
         raise Exception("Config file missing (tried '{configfile}')!")
-    if 'matrix' not in settings:
+    if "matrix" not in settings:
         raise Exception("Missing 'matrix' section in config '{configfile}'!")
-    if 'web' not in settings:
+    if "web" not in settings:
         raise Exception("Missing 'web' section in config '{configfile}'!")
 
-    if 'logging' in settings:
-        logging.config.dictConfig(settings['logging'])
+    if "logging" in settings:
+        logging.config.dictConfig(settings["logging"])
         logging.debug("Logging configured")
 
     # Initialize Message bot
-    msgbot = MessageBot(settings['matrix'].get('domain'),
-                        settings['matrix'].get('access'),
-                        settings['web'].get('access'))
+    msgbot = MessageBot(
+        settings["matrix"].get("domain"),
+        settings["matrix"].get("access"),
+        settings["web"].get("access"),
+    )
     try:
-        connected = await msgbot.connect(settings['matrix'].get('homeserver'),
-                                         settings['matrix'].get('user'),
-                                         settings['matrix'].get('password'))
+        connected = await msgbot.connect(
+            settings["matrix"].get("homeserver"),
+            settings["matrix"].get("user"),
+            settings["matrix"].get("password"),
+        )
         if not connected:
-            raise Exception("Unable to log into matrix at "
-                            f"{settings['matrix'].get('homeserver')} as "
-                            f"{settings['matrix'].get('user')}!")
+            raise Exception(
+                "Unable to log into matrix at "
+                f"{settings['matrix'].get('homeserver')} as "
+                f"{settings['matrix'].get('user')}!"
+            )
 
         # Preparing web server
         app = web.Application()
-        app.add_routes([
-            web.get('/', msgbot.handle_landing),
-            web.get('/{to}/', msgbot.handle_snom),
-            web.get('/{to}/{message}', msgbot.handle_send)
-        ])
+        app.add_routes(
+            [
+                web.get("/", msgbot.handle_landing),
+                web.get("/{to}/", msgbot.handle_snom),
+                web.get("/{to}/{message}", msgbot.handle_send),
+            ]
+        )
         runner = web.AppRunner(app)
         await runner.setup()
 
         # Start endpoints
         endpoints = []
-        for service in settings['web']:
-            if service != 'access':
-                if 'cert' in settings['web'][service] and 'key' in settings['web'][service]:
+        for service in settings["web"]:
+            if service != "access":
+                if (
+                    "cert" in settings["web"][service]
+                    and "key" in settings["web"][service]
+                ):
                     logging.debug("Setting up HTTPS service '%s'", service)
                     ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-                    ssl_context.load_cert_chain(settings['web'][service].get('cert'),
-                                                settings['web'][service].get('key'))
+                    ssl_context.load_cert_chain(
+                        settings["web"][service].get("cert"),
+                        settings["web"][service].get("key"),
+                    )
                 else:
                     logging.debug("Setting up HTTP service '%s'", service)
                     ssl_context = None
-                endpoint = web.TCPSite(runner, settings['web'][service].get('host'),
-                                       settings['web'][service].get('port'),
-                                       ssl_context=ssl_context)
+                endpoint = web.TCPSite(
+                    runner,
+                    settings["web"][service].get("host"),
+                    settings["web"][service].get("port"),
+                    ssl_context=ssl_context,
+                )
                 await endpoint.start()
                 endpoints.append(endpoint)
 
@@ -419,5 +485,5 @@ async def start(configfile: str) -> None:
         await msgbot.disconnect()
 
 
-if __name__ == '__main__':
-    asyncio.run(start(sys.argv[1] if len(sys.argv) > 1 else 'config.yml'))
+if __name__ == "__main__":
+    asyncio.run(start(sys.argv[1] if len(sys.argv) > 1 else "config.yml"))
