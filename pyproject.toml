@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "http2matrix"
+version = "1.0.0"
+description = "A HTTP2Matrix message bot"
+authors = ["Bernhard Heinloth", "Harald Böhm"]
+readme = "README.md"
+license = "AGPL"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+matrix-nio = "^0.23.0"
+aiohttp = "^3.9.1"
+pyyaml = "^6.0.1"
+
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^6.1.0"
+black = "^23.11.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

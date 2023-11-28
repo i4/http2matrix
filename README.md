@@ -24,6 +24,20 @@ or by using [pip](https://pip.pypa.io/) and the enclosed `requirements.txt` file
 
 	pip install -r requirements.txt
 
+The repository also supports [Poetry](https://python-poetry.org/) for dependency installation
+
+	poetry install
+
+
+Development
+-----------
+
+Poetry also allows you to install dependencies that might be required during
+development. In particular, this includes the linter
+[flake8](https://github.com/PyCQA/flake8) and the formatter
+[Black](https://github.com/psf/black).
+
+	poetry install --group dev
 
 Install
 -------
@@ -47,6 +61,10 @@ You should also consider using a restricted user without any write permissions o
 Start your server with
 
 	python3 http2matrix.py config.yml
+
+or using poetry
+
+	poetry run python3 http2matrix.py config.yml
 
 or use *systemd* to manage it as a service:
 
