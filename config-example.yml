@@ -31,7 +31,7 @@ web:
 # Configuration for Matrix message bot
 matrix:
     # Account
-    homeserver: "https://matrix.fau.de/"
+    homeserver: "https://matrix.fau.de"
     user: "@i4bot:fau.de"
     password: "correcthorsebatterystaple"
 

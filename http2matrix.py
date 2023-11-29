@@ -126,6 +126,12 @@ class MessageBot:
 
     async def connect(self, homeserver: str, user: str, password: str) -> bool:
         """Connect and login into Matrix"""
+
+        # If the home server address contains a trailing slash, matrix-nio will
+        # produce invalid request paths and login will fail. Therefore, we
+        # remove it here just to be safe.
+        homeserver = homeserver.removesuffix("/")
+
         client = AsyncClient(homeserver, user)
         resp = await client.login(password)
         if isinstance(resp, responses.LoginResponse):
