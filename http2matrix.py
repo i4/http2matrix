@@ -14,19 +14,49 @@ import re
 import ssl
 import sys
 import html
+import json
 import asyncio
 import logging
 import logging.config
+import os
 
+import aiofiles
 import yaml
 from aiohttp import web
 from nio import AsyncClient, responses
-
 
 __author__ = "Bernhard Heinloth"
 __copyright__ = "Copyright 2023, Informatik 4 / FAU"
 __license__ = "AGPL"
 __version__ = "1.0.0"
+
+CONFIG_FILE = "credentials.json"
+
+
+def write_details_to_disk(resp: LoginResponse, homeserver) -> None:
+    """
+    Writes the required login details to disk so we can log in later without
+    using a password.
+
+    Taken verbatim from:
+    https://matrix-nio.readthedocs.io/en/latest/examples.html#log-in-using-a-stored-access-token
+
+    Arguments:
+        resp {LoginResponse} -- the successful client login response.
+        homeserver -- URL of homeserver, e.g. "https://matrix.example.org"
+    """
+    # open the config file in write-mode
+    with open(CONFIG_FILE, "w") as f:
+        # write the login details to disk
+        json.dump(
+            {
+                "homeserver": homeserver,  # e.g. "https://matrix.example.org"
+                "user_id": resp.user_id,  # e.g. "@user:example.org"
+                "device_id": resp.device_id,  # device ID, 10 uppercase letters
+                "access_token": resp.access_token,  # cryptogr. access token
+            },
+            f,
+        )
 
 
 class MessageException(Exception):
@@ -78,9 +108,7 @@ class MessageBot:
         self.user: str = ""
         self.room_cache: dict[frozenset[str], str] = {}
         self.domain: str | None = default_domain
-        self.snom_fix = re.compile(
-            r"[=](\S.*?\S)([&]|$)", re.IGNORECASE | re.UNICODE
-        )
+        self.snom_fix = re.compile(r"[=](\S.*?\S)([&]|$)", re.IGNORECASE | re.UNICODE)
         if access_matrix:
             self.to_allow = self.get_to_regex(access_matrix.get("allow"))
             self.to_deny = self.get_to_regex(access_matrix.get("deny"))
@@ -97,15 +125,11 @@ class MessageBot:
         regex_list = []
         for ip in ip_list:
             if valid_ip.match(ip):
-                regex_list.append(
-                    ip.replace(".", "\\.").replace("*", "[0-9a-fA-F:.]+")
-                )
+                regex_list.append(ip.replace(".", "\\.").replace("*", "[0-9a-fA-F:.]+"))
             else:
                 logging.warning("%s is not a valid ip - skipping!\n", ip)
         return (
-            re.compile(f'^({"|".join(regex_list)})$')
-            if len(regex_list) > 0
-            else None
+            re.compile(f'^({"|".join(regex_list)})$') if len(regex_list) > 0 else None
         )
 
     @staticmethod
@@ -115,13 +139,9 @@ class MessageBot:
             return None
         regex_list = []
         for to in to_list:
-            regex_list.append(
-                ".*".join([re.escape(regex) for regex in to.split("*")])
-            )
+            regex_list.append(".*".join([re.escape(regex) for regex in to.split("*")]))
         return (
-            re.compile(f'^({"|".join(regex_list)})$')
-            if len(regex_list) > 0
-            else None
+            re.compile(f'^({"|".join(regex_list)})$') if len(regex_list) > 0 else None
         )
 
     async def connect(self, homeserver: str, user: str, password: str) -> bool:
@@ -133,27 +153,41 @@ class MessageBot:
         homeserver = homeserver.removesuffix("/")
 
         client = AsyncClient(homeserver, user)
-        resp = await client.login(password)
-        if isinstance(resp, responses.LoginResponse):
-            logging.debug("Connected as %s on %s!", user, homeserver)
+        if not os.path.exists(CONFIG_FILE):
+            resp = await client.login(password)
+            if isinstance(resp, responses.LoginResponse):
+                logging.debug("Connected as %s on %s!", user, homeserver)
+                write_details_to_disk(resp, homeserver)
+                self.user = user
+                self.client = client
+                return True
+            else:
+                logging.error(
+                    f"Logging in on {homeserver} as {user} failed: {resp.message} (HTTP STATUS: {resp.transport_response.status})"
+                )
+                await self.client.close()
+                return False
+        else:
+            async with aiofiles.open(CONFIG_FILE) as f:
+                contents = await f.read()
+            config = json.loads(contents)
+            client = AsyncClient(config["homeserver"])
+
+            client.access_token = config["access_token"]
+            client.user_id = config["user_id"]
+            client.device_id = config["device_id"]
+            logging.debug(
+                "Connected as %s on %s via stored credentials!", user, homeserver
+            )
             self.user = user
             self.client = client
             return True
-        else:
-            logging.error(
-                f"Logging in on {homeserver} as {user} failed: {resp.message} (HTTP STATUS: {resp.transport_response.status})"
-            )
-            await self.client.close()
-            return False
 
     async def get_room_members(self, room_id: str) -> frozenset[str]:
         """Get all members (joined or at least invited) of a room"""
         members = set()
         resp = await self.client.room_get_state(room_id)
-        if (
-            isinstance(resp, responses.RoomGetStateResponse)
-            and resp.room_id == room_id
-        ):
+        if isinstance(resp, responses.RoomGetStateResponse) and resp.room_id == room_id:
             for event in resp.events:
                 if (
                     "type" in event
@@ -186,13 +220,9 @@ class MessageBot:
                 to = "#" + to[1:]
             # Check if allowed
             if self.to_allow and not self.to_allow.match(to):
-                raise MessageException(
-                    400, f"Sending message to room {to} not allowed"
-                )
+                raise MessageException(400, f"Sending message to room {to} not allowed")
             if self.to_deny and self.to_deny.match(to):
-                raise MessageException(
-                    400, f"Sending message to room {to} denied"
-                )
+                raise MessageException(400, f"Sending message to room {to} denied")
             # resolve room alias
             if to[0] == "#":
                 resp = await self.client.room_resolve_alias(to)
@@ -236,9 +266,7 @@ class MessageBot:
                 )
             # check cache -- and ensure it is sill up to date
             cached_room = self.room_cache.get(members)
-            if cached_room and members == await self.get_room_members(
-                cached_room
-            ):
+            if cached_room and members == await self.get_room_members(cached_room):
                 room = cached_room
                 logging.debug(
                     "Found room %s for %s in cache",
@@ -251,9 +279,7 @@ class MessageBot:
                 cache = {}
                 resp = await self.client.joined_rooms()
                 if not isinstance(resp, responses.JoinedRoomsResponse):
-                    raise MessageException(
-                        500, "Unable to query rooms", resp.message
-                    )
+                    raise MessageException(500, "Unable to query rooms", resp.message)
                 # Check all rooms
                 for check_room in resp.rooms:
                     # get all members
@@ -278,20 +304,15 @@ class MessageBot:
                 self.room_cache = cache
             # Create new room if none exist
             if not room:
-                logging.debug(
-                    "Creating new room for %s", ", ".join(list(members))
-                )
-                resp = await self.client.room_create(
-                    is_direct=True, invite=recipients
-                )
+                logging.debug("Creating new room for %s", ", ".join(list(members)))
+                resp = await self.client.room_create(is_direct=True, invite=recipients)
                 if isinstance(resp, responses.RoomCreateResponse):
                     room = resp.room_id
                     self.room_cache[members] = resp.room_id
                 else:
                     raise MessageException(
                         500,
-                        "Unable to create new room for "
-                        + ", ".join(recipients),
+                        "Unable to create new room for " + ", ".join(recipients),
                         resp.message,
                     )
         if room:
@@ -367,19 +388,13 @@ class MessageBot:
         if not message or len(message) == 0:
             raise MessageException(400, "No message in request")
         try:
-            logging.info(
-                'Request from %s to send "%s" to "%s"', client, message, to
-            )
+            logging.info('Request from %s to send "%s" to "%s"', client, message, to)
             # Check if client is allowed to send request
             if client:
                 if self.ip_allow and not self.ip_allow.match(client):
-                    raise MessageException(
-                        403, f"Client with IP {client} not allowed"
-                    )
+                    raise MessageException(403, f"Client with IP {client} not allowed")
                 if self.ip_deny and self.ip_deny.match(client):
-                    raise MessageException(
-                        403, f"Client with IP {client} denied"
-                    )
+                    raise MessageException(403, f"Client with IP {client} denied")
             recipients = await self.send(to, message)
             return self.response(
                 "Message sent!",
@@ -493,9 +508,7 @@ async def start(configfile: str) -> None:
                     and "key" in settings["web"][service]
                 ):
                     logging.debug("Setting up HTTPS service '%s'", service)
-                    ssl_context = ssl.create_default_context(
-                        ssl.Purpose.CLIENT_AUTH
-                    )
+                    ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
                     ssl_context.load_cert_chain(
                         settings["web"][service].get("cert"),
                         settings["web"][service].get("key"),
