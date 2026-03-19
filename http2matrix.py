@@ -30,7 +30,7 @@ __copyright__ = "Copyright 2023, Informatik 4 / FAU"
 __license__ = "AGPL"
 __version__ = "1.0.0"
 
-CONFIG_FILE = "credentials.json"
+CONFIG_FILE = "/etc/http2matrix/credentials.json"
 
 
 def write_details_to_disk(resp: LoginResponse, homeserver) -> None:
